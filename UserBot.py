@@ -42,11 +42,9 @@ async def main():
 @client.on(events.NewMessage(pattern='/promote(?: (.+))?'))
 async def promote(event):
     sender = await event.get_sender()
-    sender_phone = sender.phone
     authorized_user = await client.get_me()
-    authorized_phone = authorized_user.phone
 
-    if sender_phone != authorized_phone:
+    if sender.id != authorized_user.id:
         await event.respond("You are not authorized to use this command.")
         return
 
@@ -88,4 +86,4 @@ async def run_bot():
 
 if __name__ == '__main__':
     client.loop.run_until_complete(run_bot())
-        
+    
