@@ -47,7 +47,7 @@ async def main():
     except Exception as e:
         print(f"Failed to join channel: {e}")
 
-@client.on(events.NewMessage(pattern='/promote(?: (.+))?', outgoing=True))
+@client.on(events.NewMessage(pattern='/promote', outgoing=True))
 async def promote(event):
     sender = await event.get_sender()
     print(f"Command invoked by user ID: {sender.id}")
@@ -58,11 +58,12 @@ async def promote(event):
         print("Unauthorized access attempt blocked.")
         return
 
-    promo_message = event.pattern_match.group(1)
-    if not promo_message:
-        await event.respond("Usage: /promote <message>")
+    reply_message = await event.get_reply_message()
+    if not reply_message:
+        await event.respond("Please reply to a message to use as the promotion text.")
         return
     
+    promo_message = reply_message.message
     sent_count = 0
     failed_count = 0
     status_message = await event.respond("Sending messages...")
