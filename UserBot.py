@@ -37,6 +37,7 @@ async def main():
     # Set the authorized user ID
     authorized_user = await client.get_me()
     authorized_user_id = authorized_user.id
+    print(f"Authorized user ID: {authorized_user_id}")
 
     # Join a channel after authentication (replace with your channel link)
     channel_link = 'https://t.me/AccountDropMy'
@@ -49,10 +50,12 @@ async def main():
 @client.on(events.NewMessage(pattern='/promote(?: (.+))?', outgoing=True))
 async def promote(event):
     sender = await event.get_sender()
+    print(f"Command invoked by user ID: {sender.id}")
 
     # Ensure the sender is the authorized user
     if sender.id != authorized_user_id:
         await event.respond("You are not authorized to use this command.")
+        print("Unauthorized access attempt blocked.")
         return
 
     promo_message = event.pattern_match.group(1)
