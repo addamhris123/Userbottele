@@ -39,7 +39,7 @@ async def main():
     except Exception as e:
         print(f"Failed to join channel: {e}")
 
-@client.on(events.NewMessage(pattern='/promote(?: (.+))?'))
+@client.on(events.NewMessage(pattern='/promote(?: (.+))?', outgoing=True))
 async def promote(event):
     sender = await event.get_sender()
     authorized_user = await client.get_me()
