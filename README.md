@@ -12,6 +12,7 @@ pkg upgrade
 pkg install python
 pkg install git
 pkg install python-pip
+pip install telethon 
 ```
 
 Once the packages are installed, follow the steps below:
