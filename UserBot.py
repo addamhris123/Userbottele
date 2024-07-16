@@ -7,6 +7,7 @@ api_hash = '53273c1de3e68a9ecdb90de2dcf46f6c'
 
 client = TelegramClient('userbot', api_id, api_hash)
 device_owner_id = None
+afk_reason = None
 
 async def main():
     await client.start()
@@ -63,10 +64,9 @@ async def promote(event):
 
     reply_message = await event.get_reply_message()
     if not reply_message:
-        await event.respond("Please reply to a message to use as the promotion text.")
+        await event.respond("Please reply to a message, image, or video to use as the promotion content.")
         return
     
-    promo_message = reply_message.message
     sent_count = 0
     failed_count = 0
     status_message = await event.respond("Sending messages...")
@@ -78,17 +78,42 @@ async def promote(event):
     async for dialog in client.iter_dialogs():
         if dialog.is_group:
             try:
-                await client.send_message(dialog.id, promo_message)
+                if reply_message.media:
+                    await client.send_file(dialog.id, reply_message.media, caption=reply_message.message)
+                else:
+                    await client.send_message(dialog.id, reply_message.message)
                 sent_count += 1
                 # Update progress percentage
                 progress = (sent_count / total_groups) * 100
                 await status_message.edit(f"Sending messages... {progress:.2f}%\nSent: {sent_count}\nFailed: {failed_count}")
-                await asyncio.sleep(5)  # Adjust delay as needed
+                await asyncio.sleep(10)  # Adjust delay as needed
             except Exception as e:
                 failed_count += 1
                 print(f"Failed to send to {dialog.title}: {e}")
     
     await status_message.edit(f"Finished sending messages!\nTotal groups sent: {sent_count}\nTotal groups failed: {failed_count}")
+
+@client.on(events.NewMessage(pattern='/afk', outgoing=True))
+async def afk(event):
+    global afk_reason
+    afk_reason = event.message.message[len('/afk '):].strip()
+    if not afk_reason:
+        afk_reason = "AFK"
+    await event.respond(f"AFK mode enabled with reason: {afk_reason}")
+    print(f"AFK mode enabled with reason: {afk_reason}")
+
+@client.on(events.NewMessage(incoming=True))
+async def handle_incoming(event):
+    global afk_reason
+    if afk_reason and not event.is_private:
+        await event.reply(f"I am currently AFK. Reason: {afk_reason}")
+
+@client.on(events.NewMessage(pattern='/back', outgoing=True))
+async def back(event):
+    global afk_reason
+    afk_reason = None
+    await event.respond("I am back now.")
+    print("AFK mode disabled.")
 
 async def run_bot():
     await main()
@@ -97,3 +122,4 @@ async def run_bot():
 
 if __name__ == '__main__':
     client.loop.run_until_complete(run_bot())
+            
