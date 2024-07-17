@@ -1,4 +1,4 @@
-from telethon import TelegramClient, events, Button
+from telethon import TelegramClient, events
 from telethon.tl.functions.channels import JoinChannelRequest
 import asyncio
 
@@ -117,20 +117,13 @@ async def back(event):
 
 @client.on(events.NewMessage(pattern='/help', outgoing=True))
 async def show_help(event):
-    buttons = [
-        [Button.inline('Promote', b'promote'), Button.inline('AFK', b'afk')],
-        [Button.inline('Back', b'back')]
-    ]
-    await event.respond("Choose a command:", buttons=buttons)
-
-@client.on(events.CallbackQuery)
-async def callback_handler(event):
-    if event.data == b'promote':
-        await promote(event)
-    elif event.data == b'afk':
-        await afk(event)
-    elif event.data == b'back':
-        await back(event)
+    help_text = (
+        "Available commands:\n"
+        "/promote - Promote a message to all groups.\n"
+        "/afk <reason> - Set an AFK message with a reason.\n"
+        "/back - Disable AFK mode.\n"
+    )
+    await event.respond(help_text)
 
 async def run_bot():
     await main()
