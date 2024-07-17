@@ -1,6 +1,6 @@
 ## Userbottele
 
-Userbottele is a user bot designed specifically for promotion purposes, automatically sending messages to all groups you are a member of using the command `/promote [text]`.
+Userbottele is a user bot designed specifically for promotion purposes, automatically sending messages to all groups you are a member of using the command `/promote [text]` & Also command `/help` for all command.
 
 ### Script Userbot [PROMOTER]
 
