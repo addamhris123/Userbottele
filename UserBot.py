@@ -1,14 +1,17 @@
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, Button
 from telethon.tl.functions.channels import JoinChannelRequest
 import asyncio
+import openai
 
 api_id = '29798494'
 api_hash = '53273c1de3e68a9ecdb90de2dcf46f6c'
+openai_api_key = 'sk-proj-hbYvXmpO9Y1VaAwlCoAVT3BlbkFJDe7Oa68XtZk83EVLpSaB'
 
 client = TelegramClient('userbot', api_id, api_hash)
 device_owner_id = None
 afk_reason = None
-blacklisted_groups = set()
+
+openai.api_key = openai_api_key
 
 async def main():
     await client.start()
@@ -63,11 +66,6 @@ async def promote(event):
         print("Unauthorized access attempt blocked.")
         return
 
-    # Check if the group is blacklisted
-    if event.chat_id in blacklisted_groups:
-        await event.respond("This group is blacklisted and cannot receive promotion messages.")
-        return
-
     reply_message = await event.get_reply_message()
     if not reply_message:
         await event.respond("Please reply to a message, image, or video to use as the promotion content.")
@@ -82,7 +80,7 @@ async def promote(event):
     total_groups = len(groups)
 
     async for dialog in client.iter_dialogs():
-        if dialog.is_group and dialog.id not in blacklisted_groups:
+        if dialog.is_group:
             try:
                 if reply_message.media:
                     await client.send_file(dialog.id, reply_message.media, caption=reply_message.message)
@@ -111,7 +109,7 @@ async def afk(event):
 @client.on(events.NewMessage(incoming=True))
 async def handle_incoming(event):
     global afk_reason
-    if afk_reason and not event.is_private and (event.mentioned or event.is_reply):
+    if afk_reason and not event.is_private:
         await event.reply(f"I am currently AFK. Reason: {afk_reason}")
 
 @client.on(events.NewMessage(pattern='/back', outgoing=True))
@@ -121,27 +119,38 @@ async def back(event):
     await event.respond("I am back now.")
     print("AFK mode disabled.")
 
-@client.on(events.NewMessage(pattern='/blacklist', outgoing=True))
-async def blacklist(event):
-    sender = await event.get_sender()
-    if not is_device_owner(sender.id):
-        await event.respond("You are not authorized to use this command.")
+@client.on(events.NewMessage(pattern='/ai', outgoing=True))
+async def ai_response(event):
+    prompt = event.message.message[len('/ai '):].strip()
+    if not prompt:
+        await event.respond("Please provide a prompt for the AI. For example: /ai adakah damz hensem")
         return
-
-    blacklisted_groups.add(event.chat_id)
-    await event.respond("This group has been blacklisted from receiving promotion messages.")
+    
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=prompt,
+        max_tokens=150
+    )
+    await event.respond(response.choices[0].text.strip())
 
 @client.on(events.NewMessage(pattern='/help', outgoing=True))
-async def help(event):
-    help_message = (
-        "Available Commands:\n"
-        "/promote - Promote a message to all groups (except blacklisted ones).\n"
-        "/afk [reason] - Set your status to AFK with an optional reason.\n"
-        "/back - Remove your AFK status.\n"
-        "/blacklist - Blacklist the current group from receiving promotion messages.\n"
-        "/help - Display this help message."
-    )
-    await event.respond(help_message)
+async def show_help(event):
+    buttons = [
+        [Button.inline('Promote', b'promote'), Button.inline('AFK', b'afk')],
+        [Button.inline('Back', b'back'), Button.inline('AI', b'ai')]
+    ]
+    await event.respond("Choose a command:", buttons=buttons)
+
+@client.on(events.CallbackQuery)
+async def callback_handler(event):
+    if event.data == b'promote':
+        await promote(event)
+    elif event.data == b'afk':
+        await afk(event)
+    elif event.data == b'back':
+        await back(event)
+    elif event.data == b'ai':
+        await ai_response(event)
 
 async def run_bot():
     await main()
