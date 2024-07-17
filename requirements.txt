@@ -3,3 +3,4 @@ git
 python
 nano
 asyncio
+openai
