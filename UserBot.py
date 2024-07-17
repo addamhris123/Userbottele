@@ -1,17 +1,13 @@
 from telethon import TelegramClient, events, Button
 from telethon.tl.functions.channels import JoinChannelRequest
 import asyncio
-import openai
 
 api_id = '29798494'
 api_hash = '53273c1de3e68a9ecdb90de2dcf46f6c'
-openai_api_key = 'sk-proj-hbYvXmpO9Y1VaAwlCoAVT3BlbkFJDe7Oa68XtZk83EVLpSaB'
 
 client = TelegramClient('userbot', api_id, api_hash)
 device_owner_id = None
 afk_reason = None
-
-openai.api_key = openai_api_key
 
 async def main():
     await client.start()
@@ -119,25 +115,11 @@ async def back(event):
     await event.respond("I am back now.")
     print("AFK mode disabled.")
 
-@client.on(events.NewMessage(pattern='/ai', outgoing=True))
-async def ai_response(event):
-    prompt = event.message.message[len('/ai '):].strip()
-    if not prompt:
-        await event.respond("Please provide a prompt for the AI. For example: /ai adakah damz hensem")
-        return
-    
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150
-    )
-    await event.respond(response.choices[0].text.strip())
-
 @client.on(events.NewMessage(pattern='/help', outgoing=True))
 async def show_help(event):
     buttons = [
         [Button.inline('Promote', b'promote'), Button.inline('AFK', b'afk')],
-        [Button.inline('Back', b'back'), Button.inline('AI', b'ai')]
+        [Button.inline('Back', b'back')]
     ]
     await event.respond("Choose a command:", buttons=buttons)
 
@@ -149,8 +131,6 @@ async def callback_handler(event):
         await afk(event)
     elif event.data == b'back':
         await back(event)
-    elif event.data == b'ai':
-        await ai_response(event)
 
 async def run_bot():
     await main()
