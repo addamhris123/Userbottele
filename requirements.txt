@@ -1,6 +1,3 @@
 telethon
-git
-python
-nano
 asyncio
 openai
