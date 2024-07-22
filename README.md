@@ -32,6 +32,8 @@ Once the packages are installed, follow the steps below:
    pip install -r requirements.txt
    ```
 
+   ```git pull origin main```
+
 4. Run the user bot:
    ```bash
    python UserBot.py
