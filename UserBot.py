@@ -1,6 +1,7 @@
 from telethon import TelegramClient, events
-from telethon.tl.functions.channels import JoinChannelRequest
+import os
 import asyncio
+from datetime import datetime
 
 api_id = '29798494'
 api_hash = '53273c1de3e68a9ecdb90de2dcf46f6c'
@@ -9,13 +10,21 @@ client = TelegramClient('userbot', api_id, api_hash)
 device_owner_id = None
 afk_reason = None
 
+# Directory to store QR code images
+QR_CODE_DIR = "qr_codes"
+
+# Ensure the directory exists
+os.makedirs(QR_CODE_DIR, exist_ok=True)
+
+# Blacklisted group list
+blacklisted_groups = []
+
 async def main():
     await client.start()
     print("Client Created")
 
     global device_owner_id
 
-    # Authenticate user if not authorized
     if not await client.is_user_authorized():
         phone_number = input("Please enter your phone number (with country code): ")
         try:
@@ -35,18 +44,9 @@ async def main():
 
     print("Client Authenticated")
 
-    # Set the device owner ID after authentication
     device_owner = await client.get_me()
     device_owner_id = device_owner.id
     print(f"Device owner ID: {device_owner_id}")
-
-    # Join a channel after authentication (replace with your channel link)
-    channel_link = 'https://t.me/AccountDropMy'
-    try:
-        await client(JoinChannelRequest(channel_link))
-        print(f"Joined channel: {channel_link}")
-    except Exception as e:
-        print(f"Failed to join channel: {e}")
 
 def is_device_owner(sender_id):
     return sender_id == device_owner_id
@@ -54,44 +54,100 @@ def is_device_owner(sender_id):
 @client.on(events.NewMessage(pattern='/promote', outgoing=True))
 async def promote(event):
     sender = await event.get_sender()
-    print(f"Command invoked by user ID: {sender.id}")
-
-    # Ensure the sender is the device owner
     if not is_device_owner(sender.id):
-        await event.respond("You are not authorized to use this command.")
+        await event.respond("❌ You are not authorized to use this command.")
         print("Unauthorized access attempt blocked.")
         return
 
     reply_message = await event.get_reply_message()
     if not reply_message:
-        await event.respond("Please reply to a message, image, or video to use as the promotion content.")
+        await event.respond("❌ Please reply to a message, image, or video to use as the promotion content.")
         return
     
     sent_count = 0
     failed_count = 0
-    status_message = await event.respond("Sending messages...")
+    delay = 10  # Set your desired delay time in seconds
+    status_message = await event.respond("📤 Starting promotion...")
 
-    # Get the total number of groups
     groups = [dialog for dialog in await client.get_dialogs() if dialog.is_group]
     total_groups = len(groups)
 
-    async for dialog in client.iter_dialogs():
-        if dialog.is_group:
-            try:
-                if reply_message.media:
-                    await client.send_file(dialog.id, reply_message.media, caption=reply_message.message)
-                else:
-                    await client.send_message(dialog.id, reply_message.message)
-                sent_count += 1
-                # Update progress percentage
-                progress = (sent_count / total_groups) * 100
-                await status_message.edit(f"Sending messages... {progress:.2f}%\nSent: {sent_count}\nFailed: {failed_count}")
-                await asyncio.sleep(10)  # Adjust delay as needed
-            except Exception as e:
-                failed_count += 1
-                print(f"Failed to send to {dialog.title}: {e}")
+    loading_symbols = ["-", "\\", "|", "/"]
+
+    for dialog in groups:
+        if dialog.id in blacklisted_groups:
+            continue
+        try:
+            if reply_message.media:
+                await client.send_file(dialog.id, reply_message.media, caption=reply_message.message)
+            else:
+                await client.send_message(dialog.id, reply_message.message)
+            sent_count += 1
+            progress = (sent_count / total_groups) * 100
+            
+            for remaining_time in range(delay, 0, -1):
+                loading_animation = "".join([symbol for symbol in loading_symbols[:sent_count % len(loading_symbols) + 1]])
+                await status_message.edit(f"📤 Sending messages... {progress:.2f}%\n{loading_animation} Sent: {sent_count}\nFailed: {failed_count}\n⏭ Next group in {remaining_time} seconds...")
+                await asyncio.sleep(1)
+        except Exception as e:
+            failed_count += 1
+            print(f"Failed to send to {dialog.title}: {e}")
     
-    await status_message.edit(f"Finished sending messages!\nTotal groups sent: {sent_count}\nTotal groups failed: {failed_count}")
+    await status_message.edit(f"✅ Finished sending messages!\nTotal groups sent: {sent_count}\nTotal groups failed: {failed_count}")
+
+@client.on(events.NewMessage(pattern='/blacklist', outgoing=True))
+async def blacklist_group(event):
+    sender = await event.get_sender()
+    if not is_device_owner(sender.id):
+        await event.respond("❌ You are not authorized to use this command.")
+        print("Unauthorized access attempt blocked.")
+        return
+
+    group_id = event.chat_id
+    if group_id not in blacklisted_groups:
+        blacklisted_groups.append(group_id)
+        await event.respond("🚫 Group has been blacklisted successfully.")
+    else:
+        await event.respond("🚫 This group is already blacklisted.")
+
+@client.on(events.NewMessage(pattern='/addqr', outgoing=True))
+async def add_qr(event):
+    sender = await event.get_sender()
+    if not is_device_owner(sender.id):
+        await event.respond("❌ You are not authorized to use this command.")
+        print("Unauthorized access attempt blocked.")
+        return
+
+    reply_message = await event.get_reply_message()
+    if not reply_message or not reply_message.media:
+        await event.respond("❌ Please reply to a QR code image to use this command.")
+        return
+
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        file_path = os.path.join(QR_CODE_DIR, f"qr_{timestamp}.jpg")
+        await client.download_media(reply_message.media, file_path)
+        await event.respond("✅ QR code added successfully!")
+        print(f"QR code added with timestamp: {timestamp}")
+    except Exception as e:
+        await event.respond("❌ Failed to add QR code.")
+        print(f"Error: {e}")
+
+@client.on(events.NewMessage(pattern='/getqr', outgoing=True))
+async def get_qr(event):
+    qr_files = sorted(os.listdir(QR_CODE_DIR))
+    if not qr_files:
+        await event.respond("❌ No QR codes available.")
+        return
+
+    try:
+        for qr_file in qr_files:
+            file_path = os.path.join(QR_CODE_DIR, qr_file)
+            await client.send_file(event.chat_id, file_path, caption=f"🖼 QR Code: {qr_file}")
+            await asyncio.sleep(1)  # Optional delay to avoid spamming
+    except Exception as e:
+        await event.respond("❌ Failed to send QR code.")
+        print(f"Error sending QR code: {e}")
 
 @client.on(events.NewMessage(pattern='/afk', outgoing=True))
 async def afk(event):
@@ -99,27 +155,30 @@ async def afk(event):
     afk_reason = event.message.message[len('/afk '):].strip()
     if not afk_reason:
         afk_reason = "AFK"
-    await event.respond(f"AFK mode enabled with reason: {afk_reason}")
+    await event.respond(f"💤 AFK mode enabled with reason: {afk_reason}")
     print(f"AFK mode enabled with reason: {afk_reason}")
 
 @client.on(events.NewMessage(incoming=True))
 async def handle_incoming(event):
     global afk_reason
-    if afk_reason and not event.is_private:
-        await event.reply(f"I am currently AFK. Reason: {afk_reason}")
+    if afk_reason and event.mentioned:
+        await event.reply(f"🤖 I am currently AFK. Reason: {afk_reason}")
 
 @client.on(events.NewMessage(pattern='/back', outgoing=True))
 async def back(event):
     global afk_reason
     afk_reason = None
-    await event.respond("I am back now.")
+    await event.respond("👋 I am back now.")
     print("AFK mode disabled.")
 
 @client.on(events.NewMessage(pattern='/help', outgoing=True))
 async def show_help(event):
     help_text = (
-        "Available commands:\n"
+        "🛠 **Available Commands:**\n"
         "/promote - Promote a message to all groups.\n"
+        "/blacklist - Blacklist the current group from receiving promotions.\n"
+        "/addqr - Add a QR code (send image as a reply to this command).\n"
+        "/getqr - Retrieve all saved QR codes.\n"
         "/afk <reason> - Set an AFK message with a reason.\n"
         "/back - Disable AFK mode.\n"
     )
@@ -132,4 +191,197 @@ async def run_bot():
 
 if __name__ == '__main__':
     client.loop.run_until_complete(run_bot())
+        from telethon import TelegramClient, events
+import os
+import asyncio
+from datetime import datetime
+
+api_id = '29798494'
+api_hash = '53273c1de3e68a9ecdb90de2dcf46f6c'
+
+client = TelegramClient('userbot', api_id, api_hash)
+device_owner_id = None
+afk_reason = None
+
+# Directory to store QR code images
+QR_CODE_DIR = "qr_codes"
+
+# Ensure the directory exists
+os.makedirs(QR_CODE_DIR, exist_ok=True)
+
+# Blacklisted group list
+blacklisted_groups = []
+
+async def main():
+    await client.start()
+    print("Client Created")
+
+    global device_owner_id
+
+    if not await client.is_user_authorized():
+        phone_number = input("Please enter your phone number (with country code): ")
+        try:
+            await client.send_code_request(phone_number)
+            print("Code sent successfully!")
+        except Exception as e:
+            print(f"Error requesting code: {e}")
+            return
+        
+        code = input("Please enter the code you received: ")
+        try:
+            await client.sign_in(phone_number, code=code)
+            print("Signed in successfully!")
+        except Exception as e:
+            print(f"Error during sign in: {e}")
+            return
+
+    print("Client Authenticated")
+
+    device_owner = await client.get_me()
+    device_owner_id = device_owner.id
+    print(f"Device owner ID: {device_owner_id}")
+
+def is_device_owner(sender_id):
+    return sender_id == device_owner_id
+
+@client.on(events.NewMessage(pattern='/promote', outgoing=True))
+async def promote(event):
+    sender = await event.get_sender()
+    if not is_device_owner(sender.id):
+        await event.respond("❌ You are not authorized to use this command.")
+        print("Unauthorized access attempt blocked.")
+        return
+
+    reply_message = await event.get_reply_message()
+    if not reply_message:
+        await event.respond("❌ Please reply to a message, image, or video to use as the promotion content.")
+        return
     
+    sent_count = 0
+    failed_count = 0
+    delay = 10  # Set your desired delay time in seconds
+    status_message = await event.respond("📤 Starting promotion...")
+
+    groups = [dialog for dialog in await client.get_dialogs() if dialog.is_group]
+    total_groups = len(groups)
+
+    loading_symbols = ["-", "\\", "|", "/"]
+
+    for dialog in groups:
+        if dialog.id in blacklisted_groups:
+            continue
+        try:
+            if reply_message.media:
+                await client.send_file(dialog.id, reply_message.media, caption=reply_message.message)
+            else:
+                await client.send_message(dialog.id, reply_message.message)
+            sent_count += 1
+            progress = (sent_count / total_groups) * 100
+            
+            for remaining_time in range(delay, 0, -1):
+                loading_animation = "".join([symbol for symbol in loading_symbols[:sent_count % len(loading_symbols) + 1]])
+                await status_message.edit(f"📤 Sending messages... {progress:.2f}%\n{loading_animation} Sent: {sent_count}\nFailed: {failed_count}\n⏭ Next group in {remaining_time} seconds...")
+                await asyncio.sleep(1)
+        except Exception as e:
+            failed_count += 1
+            print(f"Failed to send to {dialog.title}: {e}")
+    
+    await status_message.edit(f"✅ Finished sending messages!\nTotal groups sent: {sent_count}\nTotal groups failed: {failed_count}")
+
+@client.on(events.NewMessage(pattern='/blacklist', outgoing=True))
+async def blacklist_group(event):
+    sender = await event.get_sender()
+    if not is_device_owner(sender.id):
+        await event.respond("❌ You are not authorized to use this command.")
+        print("Unauthorized access attempt blocked.")
+        return
+
+    group_id = event.chat_id
+    if group_id not in blacklisted_groups:
+        blacklisted_groups.append(group_id)
+        await event.respond("🚫 Group has been blacklisted successfully.")
+    else:
+        await event.respond("🚫 This group is already blacklisted.")
+
+@client.on(events.NewMessage(pattern='/addqr', outgoing=True))
+async def add_qr(event):
+    sender = await event.get_sender()
+    if not is_device_owner(sender.id):
+        await event.respond("❌ You are not authorized to use this command.")
+        print("Unauthorized access attempt blocked.")
+        return
+
+    reply_message = await event.get_reply_message()
+    if not reply_message or not reply_message.media:
+        await event.respond("❌ Please reply to a QR code image to use this command.")
+        return
+
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        file_path = os.path.join(QR_CODE_DIR, f"qr_{timestamp}.jpg")
+        await client.download_media(reply_message.media, file_path)
+        await event.respond("✅ QR code added successfully!")
+        print(f"QR code added with timestamp: {timestamp}")
+    except Exception as e:
+        await event.respond("❌ Failed to add QR code.")
+        print(f"Error: {e}")
+
+@client.on(events.NewMessage(pattern='/getqr', outgoing=True))
+async def get_qr(event):
+    qr_files = sorted(os.listdir(QR_CODE_DIR))
+    if not qr_files:
+        await event.respond("❌ No QR codes available.")
+        return
+
+    try:
+        for qr_file in qr_files:
+            file_path = os.path.join(QR_CODE_DIR, qr_file)
+            await client.send_file(event.chat_id, file_path, caption=f"🖼 QR Code: {qr_file}")
+            await asyncio.sleep(1)  # Optional delay to avoid spamming
+    except Exception as e:
+        await event.respond("❌ Failed to send QR code.")
+        print(f"Error sending QR code: {e}")
+
+@client.on(events.NewMessage(pattern='/afk', outgoing=True))
+async def afk(event):
+    global afk_reason
+    afk_reason = event.message.message[len('/afk '):].strip()
+    if not afk_reason:
+        afk_reason = "AFK"
+    await event.respond(f"💤 AFK mode enabled with reason: {afk_reason}")
+    print(f"AFK mode enabled with reason: {afk_reason}")
+
+@client.on(events.NewMessage(incoming=True))
+async def handle_incoming(event):
+    global afk_reason
+    if afk_reason and event.mentioned:
+        await event.reply(f"🤖 I am currently AFK. Reason: {afk_reason}")
+
+@client.on(events.NewMessage(pattern='/back', outgoing=True))
+async def back(event):
+    global afk_reason
+    afk_reason = None
+    await event.respond("👋 I am back now.")
+    print("AFK mode disabled.")
+
+@client.on(events.NewMessage(pattern='/help', outgoing=True))
+async def show_help(event):
+    help_text = (
+        "🛠 **Available Commands:**\n"
+        "/promote - Promote a message to all groups.\n"
+        "/blacklist - Blacklist the current group from receiving promotions.\n"
+        "/addqr - Add a QR code (send image as a reply to this command).\n"
+        "/getqr - Retrieve all saved QR codes.\n"
+        "/afk <reason> - Set an AFK message with a reason.\n"
+        "/back - Disable AFK mode.\n"
+    )
+    await event.respond(help_text)
+
+async def run_bot():
+    await main()
+    print("Bot is running...")
+    await client.run_until_disconnected()
+
+if __name__ == '__main__':
+    client.loop.run_until_complete(run_bot())
+        
