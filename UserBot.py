@@ -20,7 +20,7 @@ os.makedirs(QR_CODE_DIR, exist_ok=True)
 blacklisted_groups = []
 
 # Watermark text
-WATERMARK_TEXT = "sc script github.com/addamhris123/Userbottele"
+WATERMARK_TEXT = "💰"
 
 # Function to append watermark to a message
 def append_watermark_to_message(message):
